@@ -141,6 +141,7 @@
     cursor: pointer;
   }
   .camera-area video, .camera-area canvas {
+    transition: opacity 0.2s ease;
     width: 100%;
     height: 100%;
     object-fit: cover;
@@ -407,6 +408,10 @@
         </svg>
         <p>Toca aquí para abrir la cámara</p>
       </div>
+      <div id="scanGuide" style="display:none; position:absolute; inset:0; z-index:3; pointer-events:none;">
+        <div style="position:absolute; top:12%; left:4%; right:4%; height:44%; border:2px dashed rgba(201,162,39,0.9); border-radius:6px; box-shadow:0 0 0 9999px rgba(0,0,0,0.38);"></div>
+        <div style="position:absolute; top:60%; left:50%; transform:translateX(-50%); color:rgba(255,255,255,0.9); font-size:0.68rem; letter-spacing:0.5px; text-align:center; text-shadow:0 1px 3px #000; white-space:nowrap;">📍 Encuadra el número de serie dentro del recuadro</div>
+      </div>
     </div>
 
     <div class="ocr-status" id="ocrStatus">—</div>
@@ -506,6 +511,8 @@ function selectBill(val) {
   billType = val;
   document.querySelectorAll('.bill-btn').forEach(b => b.classList.toggle('active', +b.dataset.val === val));
   updateVerifyBtn();
+  // Habilitar captura si la cámara ya está activa
+  if (stream) document.getElementById('captureBtn').disabled = false;
 }
 
 function onSerialInput() {
@@ -553,7 +560,8 @@ async function startCamera() {
     const video = document.getElementById('video');
     video.srcObject = stream;
     placeholder.style.display = 'none';
-    document.getElementById('captureBtn').disabled = false;
+    document.getElementById('scanGuide').style.display = '';
+    document.getElementById('captureBtn').disabled = !billType;
     document.getElementById('stopBtn').style.display = 'flex';
     setOcrStatus('Apunta la cámara al número de serie del billete', '');
   } catch(e) {
@@ -565,56 +573,137 @@ function stopCamera() {
   if (stream) { stream.getTracks().forEach(t => t.stop()); stream = null; }
   document.getElementById('video').srcObject = null;
   document.getElementById('camPlaceholder').style.display = '';
+  document.getElementById('scanGuide').style.display = 'none';
   document.getElementById('captureBtn').disabled = true;
   document.getElementById('stopBtn').style.display = 'none';
   setOcrStatus('—', '');
 }
 
+// ——— PREPROCESAMIENTO AVANZADO ———
+function preprocesar(srcCanvas, zona) {
+  // zona: { x, y, w, h } en fracciones de 0 a 1
+  const sw = srcCanvas.width, sh = srcCanvas.height;
+  const cx = Math.floor(zona.x * sw);
+  const cy = Math.floor(zona.y * sh);
+  const cw = Math.floor(zona.w * sw);
+  const ch = Math.floor(zona.h * sh);
+
+  // Escalar 2x (suficiente, sin exagerar el tamaño)
+  const scale = 2;
+  const out = document.createElement('canvas');
+  out.width  = cw * scale;
+  out.height = ch * scale;
+  const ctx = out.getContext('2d');
+
+  // 1. Dibujar recorte escalado
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'high';
+  ctx.drawImage(srcCanvas, cx, cy, cw, ch, 0, 0, out.width, out.height);
+
+  // 2. Escala de grises via filtro CSS nativo (instantáneo, sin bucles)
+  ctx.filter = 'grayscale(1) contrast(2) brightness(1.1)';
+  ctx.drawImage(out, 0, 0);
+  ctx.filter = 'none';
+
+  // 3. Umbral simple pero rápido — solo un bucle lineal, sin ventana
+  const imgData = ctx.getImageData(0, 0, out.width, out.height);
+  const data = imgData.data;
+
+  // Calcular media global (un solo pase, O(n) simple)
+  let suma = 0;
+  const total = data.length / 4;
+  for (let i = 0; i < data.length; i += 4) suma += data[i]; // ya está en grises
+  const umbral = (suma / total) * 0.85; // umbral ligeramente bajo para preservar dígitos oscuros
+
+  for (let i = 0; i < data.length; i += 4) {
+    const v = data[i] < umbral ? 0 : 255;
+    data[i] = data[i+1] = data[i+2] = v;
+  }
+  ctx.putImageData(imgData, 0, 0);
+  return out;
+}
+
+// Extrae el número de serie más largo (8-9 dígitos) del texto OCR
+function extraerSerial(texto) {
+  // Quitar espacios entre dígitos que OCR a veces añade
+  const limpio = texto.replace(/\s+/g, '');
+  // Buscar todas las secuencias de 6+ dígitos
+  const matches = limpio.match(/\d{6,}/g);
+  if (!matches) return null;
+  // Quedarse con la más larga (el serial principal)
+  matches.sort((a,b) => b.length - a.length);
+  // Si tiene más de 9 dígitos, probablemente capturó ruido: tomar los primeros 9
+  let mejor = matches[0];
+  if (mejor.length > 9) mejor = mejor.slice(0, 9);
+  return mejor;
+}
+
+async function ocrEnZona(canvas, zona, psm) {
+  const recortado = preprocesar(canvas, zona);
+  const result = await Tesseract.recognize(recortado, 'eng', {
+    tessedit_char_whitelist: '0123456789 ',
+    tessedit_pageseg_mode: psm,
+    preserve_interword_spaces: '1',
+  });
+  return extraerSerial(result.data.text);
+}
+
 async function captureAndScan() {
   const video = document.getElementById('video');
   const canvas = document.getElementById('canvas');
+  const canvasEl = canvas;
   const btn = document.getElementById('captureBtn');
-
   if (!stream) return;
 
+  // Capturar frame completo
   canvas.width = video.videoWidth;
   canvas.height = video.videoHeight;
   const ctx = canvas.getContext('2d');
   ctx.drawImage(video, 0, 0);
 
-  // Pre-process: grayscale + contrast
-  const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-  const data = imgData.data;
-  for (let i = 0; i < data.length; i += 4) {
-    const avg = 0.299 * data[i] + 0.587 * data[i+1] + 0.114 * data[i+2];
-    const v = avg > 128 ? 255 : 0;
-    data[i] = data[i+1] = data[i+2] = v;
-  }
-  ctx.putImageData(imgData, 0, 0);
-
   btn.classList.add('loading');
-  setOcrStatus('Analizando imagen...', 'processing');
+  setOcrStatus('📸 Foto tomada · Analizando número...', 'processing');
+
+  // Congelar imagen: ocultar video y mostrar canvas como "foto"
+  canvasEl.style.display = 'block';
+  video.style.opacity = '0';
+
+  // Ceder el hilo al navegador para que pinte el estado antes de procesar
+  await new Promise(r => setTimeout(r, 80));
 
   try {
-    const result = await Tesseract.recognize(canvas, 'eng', {
-      tessedit_char_whitelist: '0123456789',
-      psm: 7
-    });
+    // Estrategia: solo la franja superior con fallback a imagen completa
+    // Dos intentos máximo para no congelar la UI
+    setOcrStatus('🔍 Buscando número de serie...', 'processing');
 
-    const raw = result.data.text.replace(/\D/g, '').trim();
+    // Intento 1: franja superior 45% (donde vive el serial)
+    let serial = await ocrEnZona(canvas, { x: 0.0, y: 0.0, w: 0.80, h: 0.50 }, 7);
+
+    // Intento 2: imagen completa solo si el primero falló
+    if (!serial || serial.length < 6) {
+      setOcrStatus('🔄 Reintentando con imagen completa...', 'processing');
+      serial = await ocrEnZona(canvas, { x: 0.0, y: 0.0, w: 1.0, h: 1.0 }, 6);
+    }
+
     btn.classList.remove('loading');
+    // Restaurar cámara en vivo
+    canvasEl.style.display = 'none';
+    video.style.opacity = '1';
 
-    if (raw.length >= 6) {
-      document.getElementById('serialInput').value = raw;
-      setOcrStatus(`✓ Detectado: ${raw}`, 'success');
+    if (serial && serial.length >= 6) {
+      document.getElementById('serialInput').value = serial;
+      setOcrStatus(`✓ Detectado: ${serial}`, 'success');
       updateVerifyBtn();
       verificar();
     } else {
-      setOcrStatus('No se pudo leer el número. Intenta de nuevo con mejor iluminación.', '');
+      setOcrStatus('⚠️ No se pudo leer. Asegúrate de que el número esté centrado y con buena luz.', '');
     }
   } catch(e) {
     btn.classList.remove('loading');
-    setOcrStatus('Error al procesar la imagen. Intenta manualmente.', '');
+    canvasEl.style.display = 'none';
+    video.style.opacity = '1';
+    setOcrStatus('Error al procesar. Intenta manualmente.', '');
+    console.error(e);
   }
 }
 
