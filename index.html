@@ -171,15 +171,15 @@
     width: 80%;
     height: 2px;
     background: linear-gradient(90deg, transparent, var(--oro), transparent);
-    animation: scan 2s ease-in-out infinite;
+    animation: scan 1s ease-in-out infinite; /* Más rápida la animación visual */
     opacity: 0;
     transition: opacity 0.3s;
   }
   .scanning .scan-line { opacity: 1; }
   @keyframes scan {
-    0% { transform: translateY(-40px); }
-    50% { transform: translateY(40px); }
-    100% { transform: translateY(-40px); }
+    0% { transform: translateY(-20px); }
+    50% { transform: translateY(20px); }
+    100% { transform: translateY(-20px); }
   }
 
   .scan-corners {
@@ -208,17 +208,10 @@
   .scan-corners span::before { bottom: 0; left: 0; border-width: 0 0 2px 2px; }
   .scan-corners span::after  { bottom: 0; right: 0; border-width: 0 2px 2px 0; }
 
-  /* Ocultar esquinas y guía mientras se procesa la foto */
-  .processing-shot .scan-corners::before,
-  .processing-shot .scan-corners::after,
-  .processing-shot .scan-corners span::before,
-  .processing-shot .scan-corners span::after { opacity: 0 !important; }
-  .processing-shot .scan-line { opacity: 0 !important; }
-  .processing-shot #scanGuide { opacity: 0; transition: opacity 0.2s; }
-
   .camera-btn-row {
     display: flex;
     gap: 10px;
+    justify-content: center;
   }
 
   .btn {
@@ -298,11 +291,13 @@
     opacity: 0;
     transition: all 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
     pointer-events: none;
+    display: none;
   }
   .resultado.show {
     transform: scale(1);
     opacity: 1;
     pointer-events: all;
+    display: block;
   }
   .resultado.legal {
     background: linear-gradient(135deg, #0f4a28, #1a7a40);
@@ -353,8 +348,14 @@
     min-height: 18px;
     transition: color 0.2s;
   }
-  .ocr-status.processing { color: var(--oro); }
-  .ocr-status.success { color: var(--verde-claro); }
+  .ocr-status.processing { color: var(--oro); animation: pulse 1s infinite; }
+  .ocr-status.success { color: var(--verde-claro); font-weight: bold; }
+
+  @keyframes pulse {
+    0% { opacity: 0.6; }
+    50% { opacity: 1; }
+    100% { opacity: 0.6; }
+  }
 
   /* Aviso ingreso manual */
   .aviso-manual {
@@ -386,7 +387,7 @@
   }
   @keyframes bobble {
     0%, 100% { transform: translateY(0); }
-    50%       { transform: translateY(4px); }
+    50%        { transform: translateY(4px); }
   }
 
   /* Aviso verificación visual */
@@ -415,7 +416,6 @@
     padding: 0 10px;
   }
 
-  /* Loading spinner */
   .spinner {
     width: 18px;
     height: 18px;
@@ -455,7 +455,7 @@
     <div class="card-label">Paso 2 — Escanear número de serie</div>
     <div class="camera-area scanning" id="cameraArea" onclick="startCamera()">
       <video id="video" autoplay playsinline muted></video>
-      <canvas id="canvas"></canvas>
+      <canvas id="canvas"></canvas> 
       <div class="scan-overlay">
         <div class="scan-line"></div>
       </div>
@@ -467,20 +467,17 @@
         </svg>
         <p>Toca aquí para abrir la cámara</p>
       </div>
+      <!-- OPTIMIZACIÓN VISUAL: Recuadro guía mucho más delgado (20% de alto en vez de 44%) -->
       <div id="scanGuide" style="display:none; position:absolute; inset:0; z-index:3; pointer-events:none;">
-        <div style="position:absolute; top:12%; left:4%; right:4%; height:44%; border:2px dashed rgba(201,162,39,0.9); border-radius:6px; box-shadow:0 0 0 9999px rgba(0,0,0,0.38);"></div>
-        <div style="position:absolute; top:60%; left:50%; transform:translateX(-50%); color:rgba(255,255,255,0.9); font-size:0.68rem; letter-spacing:0.5px; text-align:center; text-shadow:0 1px 3px #000; white-space:nowrap;">📍 Encuadra el número de serie dentro del recuadro</div>
+        <div style="position:absolute; top:40%; left:10%; right:10%; height:20%; border:2px dashed rgba(201,162,39,0.9); border-radius:6px; box-shadow:0 0 0 9999px rgba(0,0,0,0.45);"></div>
+        <div style="position:absolute; top:65%; left:50%; transform:translateX(-50%); color:rgba(255,255,255,0.9); font-size:0.68rem; letter-spacing:0.5px; text-align:center; text-shadow:0 1px 3px #000; white-space:nowrap;">📍 Encuadra EXACTAMENTE los números aquí</div>
       </div>
     </div>
 
-    <div class="ocr-status" id="ocrStatus">—</div>
+    <div class="ocr-status" id="ocrStatus">Iniciando sistema turbo...</div>
 
     <div class="camera-btn-row" style="margin-top:10px">
-      <button class="btn btn-primary" id="captureBtn" onclick="captureAndScan()" disabled>
-        <span class="spinner"></span>
-        <span class="btn-text">📷 Capturar y escanear</span>
-      </button>
-      <button class="btn btn-secondary" onclick="stopCamera()" id="stopBtn" style="display:none">✕ Cerrar</button>
+      <button class="btn btn-secondary" onclick="stopCamera()" id="stopBtn" style="display:none">✕ Detener Cámara</button>
     </div>
   </div>
 
@@ -527,63 +524,36 @@
 </div>
 
 <script>
-// ——— DATOS ———
+// ——— DATOS DE BILLETES ———
 const INVALIDOS = {
   50: [
-    [67250001, 67700000],
-    [69050001, 69500000],
-    [69500001, 69950000],
-    [69950001, 70400000],
-    [70400001, 70850000],
-    [70850001, 71300000],
-    [76310012, 85139995],
-    [86400001, 86850000],
-    [90900001, 91350000],
+    [67250001, 67700000], [69050001, 69500000], [69500001, 69950000],
+    [69950001, 70400000], [70400001, 70850000], [70850001, 71300000],
+    [76310012, 85139995], [86400001, 86850000], [90900001, 91350000],
     [91800001, 92250000],
   ],
   20: [
-    [87280145, 91646549],
-    [96650001, 97100000],
-    [99800001, 100250000],
-    [100250001, 100700000],
-    [109250001, 109700000],
-    [110600001, 111050000],
-    [111050001, 111500000],
-    [111950001, 112400000],
-    [112400001, 112850000],
-    [112850001, 113300000],
-    [114200001, 114650000],
-    [114650001, 115100000],
-    [115100001, 115550000],
-    [118700001, 119150000],
-    [119150001, 119600000],
+    [87280145, 91646549], [96650001, 97100000], [99800001, 100250000],
+    [100250001, 100700000], [109250001, 109700000], [110600001, 111050000],
+    [111050001, 111500000], [111950001, 112400000], [112400001, 112850000],
+    [112850001, 113300000], [114200001, 114650000], [114650001, 115100000],
+    [115100001, 115550000], [118700001, 119150000], [119150001, 119600000],
     [120500001, 120950000],
   ],
   10: [
-    [77100001, 77550000],
-    [78000001, 78450000],
-    [78900001, 96350000],
-    [96350001, 96800000],
-    [96800001, 97250000],
-    [98150001, 98600000],
-    [104900001, 105350000],
-    [105350001, 105800000],
-    [106700001, 107150000],
-    [107600001, 108050000],
-    [108050001, 108500000],
-    [109400001, 109850000],
+    [77100001, 77550000], [78000001, 78450000], [78900001, 96350000],
+    [96350001, 96800000], [96800001, 97250000], [98150001, 98600000],
+    [104900001, 105350000], [105350001, 105800000], [106700001, 107150000],
+    [107600001, 108050000], [108050001, 108500000], [109400001, 109850000],
   ]
 };
 
 let billType = null;
-let stream = null;
-
 function selectBill(val) {
   billType = val;
   document.querySelectorAll('.bill-btn').forEach(b => b.classList.toggle('active', +b.dataset.val === val));
   updateVerifyBtn();
-  // Habilitar captura si la cámara ya está activa
-  if (stream) document.getElementById('captureBtn').disabled = false;
+  document.getElementById('resultado').classList.remove('show');
 }
 
 function onSerialInput() {
@@ -620,180 +590,167 @@ function verificar() {
   res.scrollIntoView({ behavior: 'smooth', block: 'center' });
 }
 
-// ——— CÁMARA ———
+function setOcrStatus(msg, cls) {
+  const el = document.getElementById('ocrStatus');
+  el.textContent = msg;
+  el.className = 'ocr-status ' + cls;
+}
+
+// ——— LÓGICA DE CÁMARA TURBO ———
+
+let stream = null;
+let worker = null;
+let isScanning = false;
+let isProcessingFrame = false;
+let lastDetectedDigits = null;
+let matchCount = 0;
+const REQUIRED_MATCHES = 2; 
+
+async function initOCR() {
+  try {
+    worker = await Tesseract.createWorker('eng', 1);
+    
+    // OPTIMIZACIÓN 1: Whitelist + PSM 7 (Línea de texto única)
+    // El PSM 7 (Single Line) evita que la IA busque párrafos, haciéndola rapidísima.
+    await worker.setParameters({ 
+      tessedit_char_whitelist: '0123456789',
+      tessedit_pageseg_mode: '7' 
+    });
+    
+    setOcrStatus('Motor Turbo IA listo. Puedes abrir la cámara.', 'success');
+  } catch (err) {
+    setOcrStatus('Error al cargar la IA. Usa ingreso manual.', 'error');
+    console.error(err);
+  }
+}
+
+window.addEventListener('load', initOCR);
+
 async function startCamera() {
   const placeholder = document.getElementById('camPlaceholder');
   if (stream) return;
+  
+  if (!billType) { 
+    alert('Primero selecciona el tipo de billete (Paso 1) antes de escanear.'); 
+    return; 
+  }
+
   try {
     stream = await navigator.mediaDevices.getUserMedia({
+      // Preferimos resolución HD para que el recorte pequeño no pierda calidad
       video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } }
     });
     const video = document.getElementById('video');
     video.srcObject = stream;
     placeholder.style.display = 'none';
     document.getElementById('scanGuide').style.display = '';
-    document.getElementById('captureBtn').disabled = !billType;
     document.getElementById('stopBtn').style.display = 'flex';
-    setOcrStatus('Apunta la cámara al número de serie del billete', '');
+    
+    video.onplaying = () => {
+      isScanning = true;
+      setOcrStatus('Detectando números al vuelo...', 'processing');
+      scanLoop();
+    };
   } catch(e) {
-    setOcrStatus('No se pudo acceder a la cámara: ' + e.message, '');
+    setOcrStatus('No se pudo acceder a la cámara.', '');
   }
 }
 
 function stopCamera() {
+  isScanning = false;
   if (stream) { stream.getTracks().forEach(t => t.stop()); stream = null; }
-  document.getElementById('cameraArea').classList.remove('processing-shot');
   document.getElementById('video').srcObject = null;
-  document.getElementById('video').style.opacity = '1';
-  document.getElementById('canvas').style.display = 'none';
   document.getElementById('camPlaceholder').style.display = '';
   document.getElementById('scanGuide').style.display = 'none';
-  document.getElementById('captureBtn').disabled = true;
   document.getElementById('stopBtn').style.display = 'none';
-  setOcrStatus('—', '');
+  setOcrStatus('Cámara detenida.', '');
 }
 
-// ——— PREPROCESAMIENTO AVANZADO ———
-function preprocesar(srcCanvas, zona) {
-  // zona: { x, y, w, h } en fracciones de 0 a 1
-  const sw = srcCanvas.width, sh = srcCanvas.height;
-  const cx = Math.floor(zona.x * sw);
-  const cy = Math.floor(zona.y * sh);
-  const cw = Math.floor(zona.w * sw);
-  const ch = Math.floor(zona.h * sh);
+async function scanLoop() {
+  if (!isScanning) return;
+  if (isProcessingFrame || !worker) {
+    setTimeout(scanLoop, 50);
+    return;
+  }
 
-  // Escalar 2x (suficiente, sin exagerar el tamaño)
-  const scale = 2.5;
-  const out = document.createElement('canvas');
-  out.width  = cw * scale;
-  out.height = ch * scale;
-  const ctx = out.getContext('2d');
+  isProcessingFrame = true;
 
-  // 1. Dibujar recorte escalado
-  ctx.imageSmoothingEnabled = true;
-  ctx.imageSmoothingQuality = 'high';
-  ctx.drawImage(srcCanvas, cx, cy, cw, ch, 0, 0, out.width, out.height);
+  const video = document.getElementById('video');
+  const canvas = document.getElementById('canvas');
+  const ctx = canvas.getContext('2d');
 
-  // 2. Escala de grises via filtro CSS nativo (instantáneo, sin bucles)
-  ctx.filter = 'grayscale(1) contrast(2.5) brightness(1.05) saturate(0)';
-  ctx.drawImage(out, 0, 0);
+  // OPTIMIZACIÓN 2: Reducir el ROI agresivamente
+  // En vez de 40% de alto, solo tomamos un 18% del alto. Menos píxeles = IA más rápida.
+  const vw = video.videoWidth;
+  const vh = video.videoHeight;
+  const roiW = vw * 0.8;
+  const roiH = vh * 0.18;
+  const roiX = (vw - roiW) / 2;
+  const roiY = (vh - roiH) / 2;
+
+  canvas.width = roiW;
+  canvas.height = roiH;
+  
+  // OPTIMIZACIÓN 3: Filtro Nativo por GPU
+  // Convertimos a blanco y negro con mucho contraste usando la tarjeta gráfica
+  // Esto elimina sombras y hace que los números resalten perfectamente.
+  ctx.filter = 'grayscale(100%) contrast(250%) brightness(120%)';
+  ctx.drawImage(video, roiX, roiY, roiW, roiH, 0, 0, roiW, roiH);
   ctx.filter = 'none';
 
-  // 3. Umbral simple pero rápido — solo un bucle lineal, sin ventana
-  const imgData = ctx.getImageData(0, 0, out.width, out.height);
-  const data = imgData.data;
-
-  // Calcular media global (un solo pase, O(n) simple)
-  let suma = 0;
-  const total = data.length / 4;
-  for (let i = 0; i < data.length; i += 4) suma += data[i]; // ya está en grises
-  const umbral = (suma / total) * 0.85; // umbral ligeramente bajo para preservar dígitos oscuros
-
-  for (let i = 0; i < data.length; i += 4) {
-    const v = data[i] < umbral ? 0 : 255;
-    data[i] = data[i+1] = data[i+2] = v;
-  }
-  ctx.putImageData(imgData, 0, 0);
-  return out;
-}
-
-// Extrae el número de serie más largo (8-9 dígitos) del texto OCR
-function extraerSerial(texto) {
-  // Corregir confusiones comunes del OCR: letras que parecen números
-  const corregido = texto
-    .replace(/[Oo]/g, '0')
-    .replace(/[IlLi|!]/g, '1')
-    .replace(/[Ss]/g, '5')
-    .replace(/[Bb]/g, '8')
-    .replace(/[Gg]/g, '9')
-    .replace(/[Zz]/g, '2');
-
-  const limpio = corregido.replace(/\s+/g, '');
-  const matches = limpio.match(/\d{6,}/g);
-  if (!matches) return null;
-  matches.sort((a,b) => b.length - a.length);
-  let mejor = matches[0];
-  if (mejor.length > 9) mejor = mejor.slice(0, 9);
-  return mejor;
-}
-
-async function ocrEnZona(canvas, zona, psm) {
-  const recortado = preprocesar(canvas, zona);
-  const result = await Tesseract.recognize(recortado, 'eng', {
-    tessedit_char_whitelist: '0123456789OoIlLSsBbGgZz ',
-    tessedit_pageseg_mode: psm,
-    preserve_interword_spaces: '1',
-  });
-  return extraerSerial(result.data.text);
-}
-
-async function captureAndScan() {
-  const video  = document.getElementById('video');
-  const canvas = document.getElementById('canvas');
-  const area   = document.getElementById('cameraArea');
-  const btn    = document.getElementById('captureBtn');
-  if (!stream) return;
-
-  // Capturar frame completo
-  canvas.width  = video.videoWidth  || 640;
-  canvas.height = video.videoHeight || 360;
-  canvas.getContext('2d').drawImage(video, 0, 0);
-
-  // CONGELAR: mostrar foto, ocultar video + esquinas + guía
-  canvas.style.display = 'block';
-  video.style.opacity  = '0';
-  area.classList.add('processing-shot');
-
-  btn.classList.add('loading');
-  setOcrStatus('📸 Foto tomada · Analizando...', 'processing');
-  await new Promise(r => setTimeout(r, 80));
-
-  const descongelar = () => {
-    btn.classList.remove('loading');
-    area.classList.remove('processing-shot');
-    canvas.style.display = 'none';
-    video.style.opacity  = '1';
-  };
-
   try {
-    setOcrStatus('🔍 Buscando número de serie...', 'processing');
+    const result = await worker.recognize(canvas);
+    const rawText = result.data.text;
+    const cleanDigits = rawText.replace(/\D/g, ''); 
+    
+    const match = cleanDigits.match(/\d{6,10}/);
 
-    // Intento 1: zona exacta del recuadro dorado (top 12-56%, left 4-96%)
-    let serial = await ocrEnZona(canvas, { x: 0.04, y: 0.12, w: 0.92, h: 0.44 }, 7);
+    if (match) {
+      const foundDigits = match[0];
+      
+      // Mostrar al usuario lo que la IA está "viendo" en tiempo real (da sensación de velocidad)
+      setOcrStatus(`Leyendo: ${foundDigits}... confirmando`, 'processing');
 
-    // Intento 2: franja superior más amplia
-    if (!serial || serial.length < 6) {
-      setOcrStatus('🔄 Reintentando...', 'processing');
-      serial = await ocrEnZona(canvas, { x: 0.0, y: 0.0, w: 0.85, h: 0.55 }, 7);
-    }
-
-    // Intento 3: imagen completa
-    if (!serial || serial.length < 6) {
-      setOcrStatus('🔄 Último intento...', 'processing');
-      serial = await ocrEnZona(canvas, { x: 0.0, y: 0.0, w: 1.0, h: 1.0 }, 6);
-    }
-
-    descongelar();
-
-    if (serial && serial.length >= 6) {
-      document.getElementById('serialInput').value = serial;
-      setOcrStatus(`✓ Detectado: ${serial}`, 'success');
-      updateVerifyBtn();
-      verificar();
+      if (foundDigits === lastDetectedDigits) {
+        matchCount++;
+        if (matchCount >= REQUIRED_MATCHES) {
+          handleSuccess(foundDigits);
+          isProcessingFrame = false;
+          return; 
+        }
+      } else {
+        lastDetectedDigits = foundDigits;
+        matchCount = 1; 
+      }
     } else {
-      setOcrStatus('⚠️ No se pudo leer. Intenta con mejor luz o escríbelo manualmente.', '');
+      matchCount = 0; 
+      setOcrStatus('Detectando números al vuelo...', 'processing');
     }
   } catch(e) {
-    descongelar();
-    setOcrStatus('Error al procesar. Intenta manualmente.', '');
-    console.error(e);
+    console.error("Error en OCR:", e);
+  }
+
+  isProcessingFrame = false;
+  
+  // OPTIMIZACIÓN 4: Throttling más rápido
+  // Bajamos de 300ms a 100ms (~10 fotos procesadas por segundo si el celular lo soporta)
+  if (isScanning) {
+    setTimeout(scanLoop, 100);
   }
 }
 
-function setOcrStatus(msg, cls) {
-  const el = document.getElementById('ocrStatus');
-  el.textContent = msg;
-  el.className = 'ocr-status ' + cls;
+function handleSuccess(digits) {
+  stopCamera();
+  
+  const input = document.getElementById('serialInput');
+  input.value = digits;
+  
+  setOcrStatus(`✓ Detectado exitosamente: ${digits}`, 'success');
+  
+  if (navigator.vibrate) navigator.vibrate([100, 50, 100]);
+  
+  updateVerifyBtn();
+  verificar();
 }
 </script>
 </body>
