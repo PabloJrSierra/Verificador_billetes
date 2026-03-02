@@ -356,6 +356,57 @@
   .ocr-status.processing { color: var(--oro); }
   .ocr-status.success { color: var(--verde-claro); }
 
+  /* Aviso ingreso manual */
+  .aviso-manual {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    background: #fff8e8;
+    border: 1px solid rgba(201,162,39,0.35);
+    border-radius: 12px;
+    padding: 12px 16px;
+  }
+  .aviso-icono { font-size: 1.3rem; flex-shrink: 0; }
+  .aviso-manual div { flex: 1; }
+  .aviso-manual strong {
+    display: block;
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: #7a5800;
+  }
+  .aviso-manual span:not(.aviso-icono):not(.aviso-flecha) {
+    font-size: 0.72rem;
+    color: #a07020;
+  }
+  .aviso-flecha {
+    font-size: 1.1rem;
+    color: var(--oro);
+    flex-shrink: 0;
+    animation: bobble 1.5s ease-in-out infinite;
+  }
+  @keyframes bobble {
+    0%, 100% { transform: translateY(0); }
+    50%       { transform: translateY(4px); }
+  }
+
+  /* Aviso verificación visual */
+  .aviso-verificar {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    background: #f0f9f4;
+    border: 1px solid rgba(26,92,56,0.2);
+    border-radius: 12px;
+    padding: 12px 16px;
+  }
+  .aviso-verificar span { font-size: 1.1rem; flex-shrink: 0; margin-top: 1px; }
+  .aviso-verificar p {
+    font-size: 0.72rem;
+    color: #1a5c38;
+    line-height: 1.6;
+    margin: 0;
+  }
+
   .nota-legal {
     font-size: 0.7rem;
     color: #aaa;
@@ -433,8 +484,15 @@
     </div>
   </div>
 
-  <!-- Separador -->
-  <div class="divider">o ingresa manualmente</div>
+  <!-- Separador con aviso -->
+  <div class="aviso-manual">
+    <span class="aviso-icono">⌨️</span>
+    <div>
+      <strong>¿Problemas con el escaneo?</strong>
+      <span>Ingresa el número manualmente</span>
+    </div>
+    <span class="aviso-flecha">↓</span>
+  </div>
 
   <!-- PASO 2 alternativo -->
   <div class="card">
@@ -457,6 +515,11 @@
     <div class="veredicto" id="resVeredicto"></div>
     <div class="detalle" id="resDetalle"></div>
     <div class="serial-mostrado" id="resSerial"></div>
+  </div>
+
+  <div class="aviso-verificar">
+    <span>👁️</span>
+    <p>Verifica siempre que el número escaneado coincida con el número impreso en tu billete antes de tomar una decisión.</p>
   </div>
 
   <p class="nota-legal">Basado en el Comunicado de Prensa CP9/2026 del Banco Central de Bolivia (28 feb 2026). Esta herramienta es orientativa.</p>
